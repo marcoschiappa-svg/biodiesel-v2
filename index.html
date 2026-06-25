@@ -427,9 +427,41 @@ async function sincronizarTodo() {
   }
 }
 
-// Inicializar
-setSyncStatus('ok', 'Listo');
-updBadge();
+// Inicializar — cargar desde Supabase
+async function inicializar() {
+  setSyncStatus('loading', 'Cargando datos...');
+  try {
+    const data = await sbFetch('/rest/v1/puntos?select=*&order=id_local.asc', {
+      headers: {'Prefer': 'return=representation'}
+    });
+    if(Array.isArray(data) && data.length > 0) {
+      puntos = data.map(r => ({
+        id: r.id_local,
+        area: r.area||'',
+        disc: r.disc||'',
+        autor: r.autor||'—',
+        tipo: r.tipo||'',
+        desc: r.descripcion||'',
+        accion: r.accion||'',
+        tiempo: r.tiempo||'',
+        costo: r.costo||null,
+        sem: r.sem||'v',
+        estado: r.estado||'pendiente',
+        responsable: r.responsable||'',
+        deadline: r.deadline||'',
+        fecha: r.fecha||''
+      }));
+      guardarLocal();
+    }
+    setSyncStatus('ok', 'Sincronizado');
+  } catch(e) {
+    setSyncStatus('err', 'Sin conexión — datos locales');
+    console.error(e);
+  }
+  updBadge();
+}
+
+inicializar();
 
 function go(v, el) {
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
