@@ -463,6 +463,21 @@ async function inicializar() {
 
 inicializar();
 
+// Exponer funciones al scope global para el HTML dinámico
+window.go = go;
+window.setSem = setSem;
+window.setMSem = setMSem;
+window.setEst = setEst;
+window.guardar = guardar;
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.guardarEdicion = guardarEdicion;
+window.eliminarPunto = eliminarPunto;
+window.cambiarEstado = cambiarEstado;
+window.sincronizarTodo = sincronizarTodo;
+window.exportar = exportar;
+window.importarExcel = importarExcel;
+
 function go(v, el) {
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
