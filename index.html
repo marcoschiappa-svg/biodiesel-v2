@@ -436,7 +436,7 @@ async function inicializar() {
     });
     if(Array.isArray(data) && data.length > 0) {
       puntos = data.map(r => ({
-        id: r.id_local,
+        id: Number(r.id_local) || r.id_local,
         area: r.area||'',
         disc: r.disc||'',
         autor: r.autor||'—',
@@ -558,7 +558,7 @@ function dlHtml(dl){
 }
 
 function openModal(id) {
-  const p = puntos.find(p=>p.id===id);
+  const p = puntos.find(p=>String(p.id)===String(id));
   if(!p) return;
   modalId = id;
   document.getElementById('m-title').textContent = p.area.split('—')[0].trim()+' — '+p.tipo;
@@ -583,7 +583,7 @@ function closeModal() { document.getElementById('modal-overlay').classList.remov
 function guardarEdicion() {
   if(!modalId) return;
   const c = document.getElementById('m-costo').value;
-  const p = puntos.find(p=>p.id===modalId);
+  const p = puntos.find(p=>String(p.id)===String(modalId));
   if(!p) return;
   p.area = document.getElementById('m-area').value;
   p.disc = document.getElementById('m-disc').value;
@@ -610,7 +610,7 @@ function guardarEdicion() {
 function eliminarPunto() {
   if(!confirm('¿Eliminar este punto definitivamente?')) return;
   eliminarSupabase(modalId);
-  puntos = puntos.filter(p=>p.id!==modalId);
+  puntos = puntos.filter(p=>String(p.id)!==String(modalId));
   guardarLocal();
   closeModal();
   updBadge();
@@ -709,7 +709,7 @@ function renderAprob() {
 }
 
 function cambiarEstado(id, estado) {
-  const p = puntos.find(p=>p.id===id);
+  const p = puntos.find(p=>String(p.id)===String(id));
   if(p){
     p.estado = estado;
     guardarLocal();
