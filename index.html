@@ -299,6 +299,18 @@ tr:hover td{background:#f5f5f3}
     <div class="mfg">
       <div class="mfl"><label>Responsable asignado</label><input type="text" id="m-resp" placeholder="Nombre completo"></div>
       <div class="mfl"><label>Deadline</label><input type="date" id="m-dl"></div>
+      <div class="mfl full" style="margin-top:4px">
+        <label>Documento PDF</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label style="padding:5px 12px;font-size:12px;border-radius:8px;border:1px solid #d3d1c7;cursor:pointer;background:#f1efe8;color:#1a1a18;display:inline-flex;align-items:center;gap:5px">
+            <i class="ti ti-upload"></i> Subir PDF
+            <input type="file" id="m-pdf-input" accept=".pdf" style="display:none" onchange="subirPDFModal(this)">
+          </label>
+          <a id="m-pdf-link" href="#" target="_blank" style="display:none;font-size:12px;color:#0C447C;text-decoration:underline;align-items:center;gap:4px"><i class="ti ti-file-type-pdf"></i> Ver PDF</a>
+          <button id="m-pdf-delete" onclick="eliminarPDFModal()" style="display:none;padding:5px 10px;font-size:11px;border-radius:8px;border:1px solid #F09595;cursor:pointer;background:#FCEBEB;color:#791F1F">Eliminar</button>
+          <span id="m-pdf-status" style="font-size:11px;color:#5f5e5a"></span>
+        </div>
+      </div>
       <div class="mfl full"><label>Estado</label>
         <div class="estado-btns">
           <button class="est-btn" data-est="pendiente" onclick="setEst(this)">Pendiente</button>
@@ -344,6 +356,36 @@ async function sbFetch(path, options = {}) {
   return text ? JSON.parse(text) : {};
 }
 
+async function subirPDF(file, idPunto) {
+  const path = idPunto + '.pdf';
+  const res = await fetch(SUPABASE_URL + '/storage/v1/object/documentos/' + path, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/pdf',
+      'x-upsert': 'true'
+    },
+    body: file
+  });
+  if(!res.ok) throw new Error('Error subiendo PDF: ' + res.status);
+  return SUPABASE_URL + '/storage/v1/object/public/documentos/' + path;
+}
+
+function urlPDF(idPunto) {
+  return SUPABASE_URL + '/storage/v1/object/public/documentos/' + idPunto + '.pdf';
+}
+
+async function eliminarPDF(idPunto) {
+  await fetch(SUPABASE_URL + '/storage/v1/object/documentos/' + idPunto + '.pdf', {
+    method: 'DELETE',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY
+    }
+  });
+}
+
 const ESTADOS = {
   label:{pendiente:'Pendiente',aprobado:'Aprobado',rechazado:'Rechazado',en_estudio:'En estudio',capex:'Capex',ejecutando:'Ejecutando',implementado:'Implementado'},
   badge:{pendiente:'bg',aprobado:'bb',rechazado:'br',en_estudio:'bp',capex:'ba',ejecutando:'bb',implementado:'bv'}
@@ -369,7 +411,8 @@ async function guardarSupabase(p) {
         area: p.area, disc: p.disc, autor: p.autor, tipo: p.tipo,
         descripcion: p.desc, accion: p.accion, tiempo: p.tiempo,
         costo: p.costo, sem: p.sem, estado: p.estado,
-        responsable: p.responsable, deadline: p.deadline, fecha: p.fecha
+        responsable: p.responsable, deadline: p.deadline, fecha: p.fecha,
+        tiene_pdf: p.tiene_pdf||false
       })
     });
   } catch(e) {
@@ -385,7 +428,8 @@ async function actualizarSupabase(p) {
         area: p.area, disc: p.disc, autor: p.autor, tipo: p.tipo,
         descripcion: p.desc, accion: p.accion, tiempo: p.tiempo,
         costo: p.costo, sem: p.sem, estado: p.estado,
-        responsable: p.responsable, deadline: p.deadline, fecha: p.fecha
+        responsable: p.responsable, deadline: p.deadline, fecha: p.fecha,
+        tiene_pdf: p.tiene_pdf||false
       })
     });
   } catch(e) {
@@ -442,6 +486,7 @@ async function inicializar() {
         autor: r.autor||'—',
         tipo: r.tipo||'',
         desc: r.descripcion||'',
+        tiene_pdf: r.tiene_pdf||false,
         accion: r.accion||'',
         tiempo: r.tiempo||'',
         costo: r.costo||null,
@@ -464,6 +509,42 @@ async function inicializar() {
 inicializar();
 
 // Exponer funciones al scope global para el HTML dinámico
+async function subirPDFModal(input) {
+  const file = input.files[0];
+  if(!file || !modalId) return;
+  const status = document.getElementById('m-pdf-status');
+  status.textContent = 'Subiendo...';
+  try {
+    await subirPDF(file, String(modalId));
+    const p = puntos.find(p=>String(p.id)===String(modalId));
+    if(p) { p.tiene_pdf = true; guardarLocal(); await actualizarSupabase(p); }
+    const pdfLink = document.getElementById('m-pdf-link');
+    pdfLink.href = urlPDF(String(modalId));
+    pdfLink.style.display = 'inline-flex';
+    document.getElementById('m-pdf-delete').style.display = 'inline-block';
+    status.textContent = 'PDF subido correctamente.';
+    setTimeout(()=>status.textContent='', 3000);
+  } catch(e) {
+    status.textContent = 'Error al subir: ' + e.message;
+    console.error(e);
+  }
+}
+
+async function eliminarPDFModal() {
+  if(!modalId || !confirm('¿Eliminar el PDF adjunto?')) return;
+  try {
+    await eliminarPDF(String(modalId));
+    const p = puntos.find(p=>String(p.id)===String(modalId));
+    if(p) { p.tiene_pdf = false; guardarLocal(); await actualizarSupabase(p); }
+    document.getElementById('m-pdf-link').style.display = 'none';
+    document.getElementById('m-pdf-delete').style.display = 'none';
+    document.getElementById('m-pdf-status').textContent = 'PDF eliminado.';
+    setTimeout(()=>document.getElementById('m-pdf-status').textContent='', 3000);
+  } catch(e) {
+    console.error(e);
+  }
+}
+
 window.go = go;
 window.setSem = setSem;
 window.setMSem = setMSem;
@@ -477,6 +558,8 @@ window.cambiarEstado = cambiarEstado;
 window.sincronizarTodo = sincronizarTodo;
 window.exportar = exportar;
 window.importarExcel = importarExcel;
+window.subirPDFModal = subirPDFModal;
+window.eliminarPDFModal = eliminarPDFModal;
 
 function go(v, el) {
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
@@ -576,6 +659,20 @@ function openModal(id) {
   document.getElementById('ms-'+(p.sem||'v')).classList.add('on'); mSemSel = p.sem||'v';
   document.querySelectorAll('.est-btn').forEach(b=>{b.classList.remove('on');if(b.dataset.est===p.estado)b.classList.add('on');});
   mEstSel = p.estado;
+  // PDF
+  const pdfLink = document.getElementById('m-pdf-link');
+  const pdfDelete = document.getElementById('m-pdf-delete');
+  const pdfStatus = document.getElementById('m-pdf-status');
+  document.getElementById('m-pdf-input').value = '';
+  pdfStatus.textContent = '';
+  if(p.tiene_pdf) {
+    pdfLink.href = urlPDF(String(p.id));
+    pdfLink.style.display = 'inline-flex';
+    pdfDelete.style.display = 'inline-block';
+  } else {
+    pdfLink.style.display = 'none';
+    pdfDelete.style.display = 'none';
+  }
   document.getElementById('modal-overlay').classList.add('open');
 }
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); modalId=null; }
@@ -682,7 +779,7 @@ function renderLista() {
     <td style="font-size:11px">${p.deadline?dlHtml(p.deadline):'—'}</td>
     <td style="font-size:11px">${p.tiempo||'—'}</td>
     <td style="font-size:11px">${fmtUSD(p.costo)}</td>
-    <td><button class="tbl-edit" onclick="openModal(${p.id})"><i class="ti ti-pencil" style="font-size:11px"></i></button></td>
+    <td style="display:flex;gap:4px">${p.tiene_pdf?`<a href="${urlPDF(String(p.id))}" target="_blank" style="padding:3px 6px;font-size:11px;border-radius:8px;border:1px solid #d3d1c7;background:#f1efe8;color:#791F1F;text-decoration:none"><i class="ti ti-file-type-pdf" style="font-size:11px"></i></a>`:''}<button class="tbl-edit" onclick="openModal(${p.id})"><i class="ti ti-pencil" style="font-size:11px"></i></button></td>
   </tr>`).join('');
 }
 
