@@ -356,34 +356,21 @@ async function sbFetch(path, options = {}) {
   return text ? JSON.parse(text) : {};
 }
 
-async function subirPDF(file, idPunto) {
-  const path = idPunto + '.pdf';
-  const res = await fetch(SUPABASE_URL + '/storage/v1/object/documentos/' + path, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Content-Type': 'application/pdf',
-      'x-upsert': 'true'
-    },
-    body: file
+async function subirPDFBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve({base64: e.target.result, nombre: file.name});
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
-  if(!res.ok) throw new Error('Error subiendo PDF: ' + res.status);
-  return SUPABASE_URL + '/storage/v1/object/public/documentos/' + path;
 }
 
-function urlPDF(idPunto) {
-  return SUPABASE_URL + '/storage/v1/object/public/documentos/' + idPunto + '.pdf';
-}
-
-async function eliminarPDF(idPunto) {
-  await fetch(SUPABASE_URL + '/storage/v1/object/documentos/' + idPunto + '.pdf', {
-    method: 'DELETE',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY
-    }
-  });
+function abrirPDFBase64(base64, nombre) {
+  const link = document.createElement('a');
+  link.href = base64;
+  link.target = '_blank';
+  link.download = nombre || 'documento.pdf';
+  link.click();
 }
 
 const ESTADOS = {
@@ -412,7 +399,9 @@ async function guardarSupabase(p) {
         descripcion: p.desc, accion: p.accion, tiempo: p.tiempo,
         costo: p.costo, sem: p.sem, estado: p.estado,
         responsable: p.responsable, deadline: p.deadline, fecha: p.fecha,
-        tiene_pdf: p.tiene_pdf||false
+        tiene_pdf: p.tiene_pdf||false,
+        pdf_base64: p.pdf_base64||null,
+        pdf_nombre: p.pdf_nombre||null
       })
     });
   } catch(e) {
@@ -429,7 +418,9 @@ async function actualizarSupabase(p) {
         descripcion: p.desc, accion: p.accion, tiempo: p.tiempo,
         costo: p.costo, sem: p.sem, estado: p.estado,
         responsable: p.responsable, deadline: p.deadline, fecha: p.fecha,
-        tiene_pdf: p.tiene_pdf||false
+        tiene_pdf: p.tiene_pdf||false,
+        pdf_base64: p.pdf_base64||null,
+        pdf_nombre: p.pdf_nombre||null
       })
     });
   } catch(e) {
@@ -487,6 +478,8 @@ async function inicializar() {
         tipo: r.tipo||'',
         desc: r.descripcion||'',
         tiene_pdf: r.tiene_pdf||false,
+        pdf_base64: r.pdf_base64||null,
+        pdf_nombre: r.pdf_nombre||null,
         accion: r.accion||'',
         tiempo: r.tiempo||'',
         costo: r.costo||null,
@@ -513,19 +506,24 @@ async function subirPDFModal(input) {
   const file = input.files[0];
   if(!file || !modalId) return;
   const status = document.getElementById('m-pdf-status');
-  status.textContent = 'Subiendo...';
+  status.textContent = 'Procesando...';
   try {
-    await subirPDF(file, String(modalId));
+    const {base64, nombre} = await subirPDFBase64(file);
     const p = puntos.find(p=>String(p.id)===String(modalId));
-    if(p) { p.tiene_pdf = true; guardarLocal(); await actualizarSupabase(p); }
+    if(p) {
+      p.tiene_pdf = true;
+      p.pdf_base64 = base64;
+      p.pdf_nombre = nombre;
+      guardarLocal();
+      await actualizarSupabase(p);
+    }
     const pdfLink = document.getElementById('m-pdf-link');
-    pdfLink.href = urlPDF(String(modalId));
     pdfLink.style.display = 'inline-flex';
     document.getElementById('m-pdf-delete').style.display = 'inline-block';
-    status.textContent = 'PDF subido correctamente.';
+    status.textContent = 'PDF guardado correctamente.';
     setTimeout(()=>status.textContent='', 3000);
   } catch(e) {
-    status.textContent = 'Error al subir: ' + e.message;
+    status.textContent = 'Error: ' + e.message;
     console.error(e);
   }
 }
@@ -533,9 +531,14 @@ async function subirPDFModal(input) {
 async function eliminarPDFModal() {
   if(!modalId || !confirm('¿Eliminar el PDF adjunto?')) return;
   try {
-    await eliminarPDF(String(modalId));
     const p = puntos.find(p=>String(p.id)===String(modalId));
-    if(p) { p.tiene_pdf = false; guardarLocal(); await actualizarSupabase(p); }
+    if(p) {
+      p.tiene_pdf = false;
+      p.pdf_base64 = null;
+      p.pdf_nombre = null;
+      guardarLocal();
+      await actualizarSupabase(p);
+    }
     document.getElementById('m-pdf-link').style.display = 'none';
     document.getElementById('m-pdf-delete').style.display = 'none';
     document.getElementById('m-pdf-status').textContent = 'PDF eliminado.';
@@ -665,8 +668,9 @@ function openModal(id) {
   const pdfStatus = document.getElementById('m-pdf-status');
   document.getElementById('m-pdf-input').value = '';
   pdfStatus.textContent = '';
-  if(p.tiene_pdf) {
-    pdfLink.href = urlPDF(String(p.id));
+  if(p.tiene_pdf && p.pdf_base64) {
+    pdfLink.onclick = function(e){ e.preventDefault(); abrirPDFBase64(p.pdf_base64, p.pdf_nombre); };
+    pdfLink.href = '#';
     pdfLink.style.display = 'inline-flex';
     pdfDelete.style.display = 'inline-block';
   } else {
