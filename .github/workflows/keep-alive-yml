@@ -1,0 +1,25 @@
+name: Mantener Supabase activo
+
+on:
+  schedule:
+    # Se ejecuta cada 3 días a las 09:00 UTC (06:00 Argentina)
+    - cron: '0 9 */3 * *'
+  workflow_dispatch: {}  # Permite ejecutarlo manualmente para probar
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consulta a la tabla puntos
+        run: |
+          CLAVE="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvdG5zZWV5dHhtbWtpYmJld2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzODM1OTQsImV4cCI6MjA5Nzk1OTU5NH0.Y0EO2nioZRRqcsg4ckx9q7Z3uJrCDw0nMJ_jTSEqsF4"
+          RESPUESTA=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://cotnseeytxmmkibbewda.supabase.co/rest/v1/puntos?select=id_local&limit=1" \
+            -H "apikey: $CLAVE" \
+            -H "Authorization: Bearer $CLAVE")
+          echo "Codigo de respuesta: $RESPUESTA"
+          if [ "$RESPUESTA" != "200" ]; then
+            echo "La consulta fallo. Revisar si el proyecto esta pausado."
+            exit 1
+          fi
+          echo "Supabase activo. Proyecto sin riesgo de pausa."
